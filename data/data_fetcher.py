@@ -18,8 +18,8 @@ class DataFetcher:
 
     def get_all_symbols(self) -> List[str]:
         try:
-            stock_list = ak.stock_info_a_code_name()
-            symbols = stock_list['code'].str.strip().tolist()
+            stock_list = ak.stock_zh_a_spot_em()
+            symbols = stock_list['代码'].str.strip().tolist()
             logging.info(f"获取到 {len(symbols)} 只A股股票代码。")
             return symbols
         except Exception as e:

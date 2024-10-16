@@ -183,14 +183,14 @@ elif page == "实时交易":
             st.session_state.signals = []  # 清空之前的信号
             st.session_state.log_messages = []  # 清空之前的日志
             # 启动自动刷新，每分钟刷新一次（60000 毫秒）
-            st.experimental_set_query_params(auto_refresh=True)
+            
             st.rerun()
             st.success("实时交易已启动")
     else:
         if st.button("停止实时交易"):
             st.session_state.live_trading = False
             # 停止自动刷新
-            st.experimental_set_query_params(auto_refresh=False)
+            
             st.rerun()
             st.success("实时交易已停止")
 
@@ -198,9 +198,6 @@ elif page == "实时交易":
     if st.session_state.live_trading:
         perform_live_trading()
         # 启动自动刷新，每分钟刷新一次（60000 毫秒）
-        count = st.experimental_get_query_params().get('count', [0])[0]
-        count = int(count) + 1
-        st.experimental_set_query_params(count=count)
         st.rerun()
 
     st.subheader("当前信号")

@@ -44,8 +44,6 @@ if 'live_trading' not in st.session_state:
     st.session_state.live_trading = False
 if 'signals' not in st.session_state:
     st.session_state.signals = []
-if 'data_fetcher' not in st.session_state:
-    st.session_state.data_fetcher = data_fetcher()
 
 # 页面标题
 st.title("量化交易系统")
@@ -171,7 +169,7 @@ elif page == "实时交易":
                 with col2:
                     if st.button(f"忽略", key=f"ign_{idx}"):
                         st.session_state.signals.pop(idx)
-                        st.experimental_rerun()
+                        st.rerun()
     else:
         st.write("暂无待处理的交易信号。")
 
@@ -195,7 +193,7 @@ elif page == "交易执行":
         
         if st.button(f"执行 {strategy_name} 策略"):
             with st.spinner(f"执行 {strategy_name} 策略..."):
-                data_fetcher_instance = st.session_state.data_fetcher
+                data_fetcher_instance = data_fetcher()
                 data = data_fetcher_instance.fetch_all_data()
                 for symbol, df in data.items():
                     buy_trades, sell_trades = strategy.decide_trade(df.copy(), portfolio)
@@ -213,7 +211,7 @@ elif page == "交易执行":
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
             ])
-            data_fetcher_instance = st.session_state.data_fetcher
+            data_fetcher_instance = data_fetcher()
             data = data_fetcher_instance.fetch_all_data()
             backtester = Backtester(combined_strategy, data)
             backtester.run_backtest()

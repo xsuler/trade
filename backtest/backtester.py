@@ -3,7 +3,7 @@
 import logging
 from typing import Dict
 from portfolio.portfolio import Portfolio
-from strategies.combined_strategy import CombinedStrategy
+from combined_strategy.combined_strategy import CombinedStrategy
 
 class Backtester:
     def __init__(self, strategy: CombinedStrategy, data: Dict[str, pd.DataFrame]):

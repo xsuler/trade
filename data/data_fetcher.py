@@ -26,6 +26,7 @@ class DataFetcher:
         self.symbols = self.get_hot_symbols()
         self.spot_data = self.fetch_spot_data()  # 初始化时获取实时价格
 
+    
     def get_hot_symbols(self) -> List[str]:
         """
         获取热门指数的成分股代码

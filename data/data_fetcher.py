@@ -8,31 +8,57 @@ from config.config import INITIAL_CASH
 import os
 
 class DataFetcher:
-    def __init__(self, start_date: str, end_date: str, period: str = 'daily', adjust: str = 'hfq'):
+    def __init__(self, start_date: str, end_date: str, period: str = 'daily', adjust: str = 'hfq', hot_indices: List[str] = None):
+        """
+        初始化 DataFetcher
+
+        :param start_date: 数据开始日期，格式 'YYYYMMDD'
+        :param end_date: 数据结束日期，格式 'YYYYMMDD'
+        :param period: 数据周期，如 'daily', 'weekly' 等
+        :param adjust: 复权方式，如 'hfq'（后复权）, 'qfq'（前复权）, 'bfq'（不复权）
+        :param hot_indices: 热门指数列表，默认为 ['000300', '399005', '399006']
+        """
         self.start_date = start_date
         self.end_date = end_date
         self.period = period
         self.adjust = adjust
-        self.symbols = self.get_all_symbols()
+        self.hot_indices = hot_indices if hot_indices else ["000300", "399005", "399006"]
+        self.symbols = self.get_hot_symbols()
         self.spot_data = self.fetch_spot_data()  # 初始化时获取实时价格
 
-    def get_all_symbols(self) -> List[str]:
-        try:
-            stock_list = ak.stock_zh_a_spot_em()
-            symbols = stock_list['代码'].str.strip().tolist()
-            logging.info(f"获取到 {len(symbols)} 只A股股票代码。")
-            return symbols
-        except Exception as e:
-            logging.error(f"获取股票代码失败: {e}")
-            return []
+    def get_hot_symbols(self) -> List[str]:
+        """
+        获取热门指数的成分股代码
+
+        :return: 股票代码列表
+        """
+        all_symbols = set()
+        for index_code in self.hot_indices:
+            try:
+                index_df = ak.index_stock_cons(index=index_code)
+                if '代码' in index_df.columns:
+                    symbols = index_df['代码'].str.strip().tolist()
+                    logging.info(f"从指数 {index_code} 获取到 {len(symbols)} 只股票代码。")
+                    all_symbols.update(symbols)
+                else:
+                    logging.warning(f"指数 {index_code} 的成分股数据中不包含 '代码' 列。")
+            except Exception as e:
+                logging.error(f"获取指数 {index_code} 成分股失败: {e}")
+        
+        symbols_list = sorted(list(all_symbols))
+        logging.info(f"总共获取到 {len(symbols_list)} 只热门股票代码。")
+        return symbols_list
 
     def fetch_spot_data(self) -> pd.DataFrame:
-        """获取所有A股的实时价格数据"""
+        """获取热门A股的实时价格数据"""
         try:
             spot_df = ak.stock_zh_a_spot_em()
             if spot_df is not None and not spot_df.empty:
-                logging.info("成功获取实时价格数据。")
-                return spot_df
+                # 过滤出热门股票
+                spot_df['代码'] = spot_df['代码'].str.strip()
+                filtered_spot_df = spot_df[spot_df['代码'].isin(self.symbols)]
+                logging.info(f"成功获取 {len(filtered_spot_df)} 只热门股票的实时价格数据。")
+                return filtered_spot_df
             else:
                 logging.warning("未获取到实时价格数据。")
                 return pd.DataFrame()
@@ -42,7 +68,7 @@ class DataFetcher:
 
     def fetch_data_for_symbol(self, symbol: str) -> Tuple[str, pd.DataFrame]:
         try:
-            # 使用 stock_zh_a_hist 代替 stock_zh_a_daily
+            # 使用 stock_zh_a_hist 获取历史数据
             df = ak.stock_zh_a_hist(symbol=symbol, period=self.period, start_date=self.start_date, end_date=self.end_date, adjust=self.adjust)
             if df is not None and not df.empty:
                 df['symbol'] = symbol
@@ -63,7 +89,7 @@ class DataFetcher:
                     data[sym] = df
             except Exception as e:
                 logging.error(f"处理 {symbol} 时发生异常: {e}")
-        logging.info(f"成功获取 {len(data)} 只股票的历史数据。")
+        logging.info(f"成功获取 {len(data)} 只热门股票的历史数据。")
         return data
 
     def fetch_current_price(self, symbol: str) -> float:

@@ -31,7 +31,7 @@ if 'signals' not in st.session_state:
 
 @st.cache_resource
 def data_fetcher():
-    return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))    
+    return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d")) 
 
 # 初始化组件（全局状态）
 @st.cache_resource
@@ -58,40 +58,41 @@ def perform_live_trading():
     data_fetcher_instance = data_fetcher()
     combined_strategy = CombinedStrategy([
         StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
-    ])
+    ], top_n=10)  # 设置筛选前10只股票
     data = data_fetcher_instance.fetch_all_data()
-    for symbol, df in data.items():
-        buy_trades, sell_trades = combined_strategy.decide_trade(df.copy(), portfolio)
-        # 添加买入信号
-        for trade in buy_trades:
-            st.session_state.signals.append({
-                'type': 'buy',
-                'symbol': trade['symbol'],
-                'price': trade['price'],
-                'quantity': trade['quantity'],
-                'time': datetime.now()
-            })
-        # 添加卖出信号
-        for trade in sell_trades:
-            st.session_state.signals.append({
-                'type': 'sell',
-                'symbol': trade['symbol'],
-                'price': trade['price'],
-                'quantity': trade['quantity'],
-                'time': datetime.now()
-            })
+    
+    buy_trades, sell_trades = combined_strategy.decide_trade(data, portfolio)
+    
+    # 添加买入信号
+    for trade in buy_trades:
+        st.session_state.signals.append({
+            'type': 'buy',
+            'symbol': trade['symbol'],
+            'price': trade['price'],
+            'quantity': trade['quantity'],
+            'time': datetime.now()
+        })
+    # 添加卖出信号
+    for trade in sell_trades:
+        st.session_state.signals.append({
+            'type': 'sell',
+            'symbol': trade['symbol'],
+            'price': trade['price'],
+            'quantity': trade['quantity'],
+            'time': datetime.now()
+        })
 
 # 页面内容
 if page == "投资组合":
     st.header("投资组合概览")
-    
+
     # 显示现金和持仓
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.subheader("现金")
         st.write(f"${portfolio.cash:,.2f}")
-    
+
     with col2:
         st.subheader("持仓")
         holdings = portfolio.holdings
@@ -100,7 +101,7 @@ if page == "投资组合":
             st.dataframe(holdings_df)
         else:
             st.write("暂无持仓")
-    
+
     # 显示组合总价值
     st.subheader("组合总价值")
     current_prices = {}
@@ -135,13 +136,12 @@ elif page == "交易日志":
 
 elif page == "实时交易":
     st.header("实时交易")
-    
+
     if not st.session_state.live_trading:
         if st.button("启动实时交易"):
             st.session_state.live_trading = True
             st.session_state.signals = []  # 清空之前的信号
             # 启动自动刷新，每分钟刷新一次（60000 毫秒）
-            st.session_state.auto_refresh_id = st.experimental_get_query_params()
             st.experimental_set_query_params(auto_refresh=True)
             st.rerun()
             st.success("实时交易已启动")
@@ -152,7 +152,7 @@ elif page == "实时交易":
             st.experimental_set_query_params(auto_refresh=False)
             st.rerun()
             st.success("实时交易已停止")
-    
+
     # 如果实时交易开启，执行交易逻辑
     if st.session_state.live_trading:
         perform_live_trading()
@@ -193,7 +193,7 @@ elif page == "实时交易":
 
 elif page == "回测":
     st.header("策略回测")
-    
+
     # 选择回测日期
     st.subheader("选择回测日期范围")
     col1, col2 = st.columns(2)
@@ -201,14 +201,16 @@ elif page == "回测":
         start_date = st.date_input("开始日期", datetime(2022, 1, 1))
     with col2:
         end_date = st.date_input("结束日期", datetime.now())
-    
+
     if st.button("运行回测"):
         with st.spinner("运行回测..."):
             data_fetcher_instance = data_fetcher()
             data = data_fetcher_instance.fetch_all_data(start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"))
+            
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
-            ])
+            ], top_n=10)  # 设置回测时筛选前10只股票
+            
             backtester = Backtester(combined_strategy, data)
             results = backtester.run_backtest()
         st.success(f"回测完成，收益: {results['total_return']*100:.2f}%")
@@ -216,14 +218,14 @@ elif page == "回测":
 
 elif page == "设置":
     st.header("系统设置")
-    
+
     # 显示当前配置
     st.subheader("当前策略配置")
     for cfg in STRATEGY_CONFIGS:
         st.write(f"### {cfg['name']}")
         for key, value in cfg['params'].items():
             st.write(f"- **{key}**: {value}")
-    
+
     st.subheader("修改交易参数")
     # 示例：修改初始现金
     new_initial_cash = st.number_input("初始现金金额", value=INITIAL_CASH, min_value=0.0, step=1000.0)
@@ -232,7 +234,7 @@ elif page == "设置":
         portfolio.cash = new_initial_cash
         portfolio.save_portfolio()
         st.success(f"初始现金已更新为 ${new_initial_cash:,.2f}")
-    
+
     # 你可以继续添加更多的设置选项，如添加/修改策略参数等
 
 # 运行 Streamlit 应用程序

@@ -71,6 +71,7 @@ def perform_live_trading():
         # 步骤 1: 获取数据
         status_placeholder.text("步骤 1/4: 获取所有股票数据...")
         data = all_stock_data()
+        st.info(len(data))
         progress_bar.progress(25)
         st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 获取所有股票数据完成，共获取到 {len(data)} 只股票的数据。")
         

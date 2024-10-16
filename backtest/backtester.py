@@ -9,7 +9,8 @@ from portfolio.portfolio import Portfolio
 from combined_strategy.combined_strategy import CombinedStrategy
 from price_time_series_manager import PriceTimeSeriesManager
 from datetime import datetime
-from config.config import INITIAL_CASH, BACKTRACE_FILE
+from config.config import BACKTRACE_FILE
+import config
 
 class Backtester:
     def __init__(self, strategy: CombinedStrategy, data: Dict[str, pd.DataFrame]):
@@ -19,7 +20,7 @@ class Backtester:
         self.price_manager = PriceTimeSeriesManager()  # 初始化管理器
 
     def run_backtest(self):
-        portfolio = Portfolio(initial_cash=INITIAL_CASH, data_fetcher=None, simulate_costs=True)  # 启用交易成本模拟
+        portfolio = Portfolio(initial_cash=config.INITIAL_CASH, data_fetcher=None, simulate_costs=True)  # 启用交易成本模拟
 
         # 获取所有交易日期的排序列表
         all_dates = set()

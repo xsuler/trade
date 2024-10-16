@@ -14,21 +14,20 @@ class Backtester:
 
     def run_backtest(self):
         portfolio = Portfolio(initial_cash=100000, data_fetcher=None)  # 不需要数据获取器
-        for symbol, df in self.data.items():
-            try:
-                buy_trades, sell_trades = self.strategy.decide_trade(df.copy(), portfolio)
-                # 模拟买入
-                for trade in buy_trades:
-                    price = trade['price']
-                    quantity = trade['quantity']
-                    portfolio.buy_stock(trade['symbol'], price, quantity)
-                # 模拟卖出
-                for trade in sell_trades:
-                    price = trade['price']
-                    quantity = trade['quantity']
-                    portfolio.sell_stock(trade['symbol'], price, quantity)
-            except Exception as e:
-                logging.error(f"处理 {symbol} 时出错: {e}")
+        buy_trades, sell_trades = self.strategy.decide_trade(self.data, portfolio)
+        
+        # 模拟买入
+        for trade in buy_trades:
+            price = trade['price']
+            quantity = trade['quantity']
+            portfolio.buy_stock(trade['symbol'], price, quantity)
+        
+        # 模拟卖出
+        for trade in sell_trades:
+            price = trade['price']
+            quantity = trade['quantity']
+            portfolio.sell_stock(trade['symbol'], price, quantity)
+        
         total_return = (portfolio.get_portfolio_value({}) - portfolio.initial_cash) / portfolio.initial_cash
         logging.info(f"回测总收益: {total_return * 100:.2f}%")
         self.results = {'total_return': total_return}

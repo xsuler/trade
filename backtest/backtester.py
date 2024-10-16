@@ -1,6 +1,7 @@
 # backtest/backtester.py
 
 import logging
+import pandas as pd
 from typing import Dict
 from portfolio.portfolio import Portfolio
 from combined_strategy.combined_strategy import CombinedStrategy

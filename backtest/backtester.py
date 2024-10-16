@@ -10,7 +10,7 @@ from combined_strategy.combined_strategy import CombinedStrategy
 from price_time_series_manager import PriceTimeSeriesManager
 from datetime import datetime
 from config.config import BACKTRACE_FILE
-import config
+import config.config as config
 
 class Backtester:
     def __init__(self, strategy: CombinedStrategy, data: Dict[str, pd.DataFrame]):

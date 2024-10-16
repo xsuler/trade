@@ -18,7 +18,7 @@ from combined_strategy.combined_strategy import CombinedStrategy
 from backtest.backtester import Backtester
 from utils.logger import setup_logger
 from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FILE, BACKTRACE_FILE, TRANSACTION_COST_RATE, SLIPPAGE_RATE
-import config
+import config.config as config
 
 # 导入价格时序管理器
 from price_time_series_manager import PriceTimeSeriesManager

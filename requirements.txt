@@ -1,4 +1,5 @@
 # 基础数据处理与科学计算
+cachetools
 pandas
 numpy
 

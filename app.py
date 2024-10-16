@@ -38,12 +38,49 @@ def initialize_portfolio():
 
 portfolio = initialize_portfolio()
 
+# 初始化 Session State
+if 'live_trading' not in st.session_state:
+    st.session_state.live_trading = False
+if 'signals' not in st.session_state:
+    st.session_state.signals = []
+if 'data_fetcher' not in st.session_state:
+    st.session_state.data_fetcher = data_fetcher()
+
 # 页面标题
 st.title("量化交易系统")
 
 # 侧边栏导航
 st.sidebar.title("导航")
-page = st.sidebar.radio("前往", ["投资组合", "交易日志", "交易执行", "回测", "设置"])
+page = st.sidebar.radio("前往", ["投资组合", "交易日志", "实时交易", "回测", "设置"])
+
+# 实时交易的后台线程函数
+def live_trading_thread():
+    data_fetcher_instance = st.session_state.data_fetcher
+    combined_strategy = CombinedStrategy([
+        StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
+    ])
+    while st.session_state.live_trading:
+        data = data_fetcher_instance.fetch_all_data()
+        for symbol, df in data.items():
+            buy_trades, sell_trades = combined_strategy.decide_trade(df.copy(), portfolio)
+            # 添加到信号列表
+            for trade in buy_trades:
+                st.session_state.signals.append({
+                    'type': 'buy',
+                    'symbol': trade['symbol'],
+                    'price': trade['price'],
+                    'quantity': trade['quantity'],
+                    'time': datetime.now()
+                })
+            for trade in sell_trades:
+                st.session_state.signals.append({
+                    'type': 'sell',
+                    'symbol': trade['symbol'],
+                    'price': trade['price'],
+                    'quantity': trade['quantity'],
+                    'time': datetime.now()
+                })
+        time.sleep(60)  # 每分钟获取一次数据
 
 # 页面内容
 if page == "投资组合":
@@ -67,9 +104,7 @@ if page == "投资组合":
     
     # 显示组合总价值
     st.subheader("组合总价值")
-    # 计算组合总价值
-    data_fetcher = data_fetcher()
-    current_prices = {symbol: data_fetcher.fetch_current_price(symbol) for symbol in portfolio.holdings.keys()}
+    current_prices = {symbol: st.session_state.data_fetcher.fetch_current_price(symbol) for symbol in portfolio.holdings.keys()}
     portfolio_value = portfolio.get_portfolio_value(current_prices)
     st.write(f"${portfolio_value:,.2f}")
 
@@ -96,6 +131,49 @@ elif page == "交易日志":
     else:
         st.write("日志文件不存在。")
 
+elif page == "实时交易":
+    st.header("实时交易")
+    
+    if not st.session_state.live_trading:
+        if st.button("启动实时交易"):
+            st.session_state.live_trading = True
+            # 启动后台线程
+            t = threading.Thread(target=live_trading_thread, daemon=True)
+            t.start()
+            st.success("实时交易已启动")
+    else:
+        if st.button("停止实时交易"):
+            st.session_state.live_trading = False
+            st.success("实时交易已停止")
+    
+    st.subheader("当前信号")
+    if st.session_state.signals:
+        for idx, signal in enumerate(st.session_state.signals):
+            with st.expander(f"信号 {idx + 1} - {signal['time'].strftime('%Y-%m-%d %H:%M:%S')}"):
+                st.write(f"**类型**: {signal['type'].capitalize()}")
+                st.write(f"**股票代码**: {signal['symbol']}")
+                st.write(f"**价格**: ${signal['price']:,.2f}")
+                # 提供调整数量的输入框
+                new_quantity = st.number_input(f"调整 {signal['type']} 份额", min_value=1, value=int(signal['quantity']), key=f"qty_{idx}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"确认 {signal['type'].capitalize()}", key=f"conf_{idx}"):
+                        if signal['type'] == 'buy':
+                            portfolio.buy_stock(signal['symbol'], signal['price'], new_quantity)
+                            st.success(f"已买入 {new_quantity} 份 {signal['symbol']}")
+                        elif signal['type'] == 'sell':
+                            portfolio.sell_stock(signal['symbol'], signal['price'], new_quantity)
+                            st.success(f"已卖出 {new_quantity} 份 {signal['symbol']}")
+                        # 移除已处理的信号
+                        st.session_state.signals.pop(idx)
+                        st.experimental_rerun()
+                with col2:
+                    if st.button(f"忽略", key=f"ign_{idx}"):
+                        st.session_state.signals.pop(idx)
+                        st.experimental_rerun()
+    else:
+        st.write("暂无待处理的交易信号。")
+
 elif page == "交易执行":
     st.header("交易执行")
     
@@ -116,8 +194,8 @@ elif page == "交易执行":
         
         if st.button(f"执行 {strategy_name} 策略"):
             with st.spinner(f"执行 {strategy_name} 策略..."):
-                data_fetcher = data_fetcher()
-                data = data_fetcher.fetch_all_data()
+                data_fetcher_instance = st.session_state.data_fetcher
+                data = data_fetcher_instance.fetch_all_data()
                 for symbol, df in data.items():
                     buy_trades, sell_trades = strategy.decide_trade(df.copy(), portfolio)
                     # 处理买入信号
@@ -134,8 +212,8 @@ elif page == "交易执行":
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
             ])
-            data_fetcher = data_fetcher()
-            data = data_fetcher.fetch_all_data()
+            data_fetcher_instance = st.session_state.data_fetcher
+            data = data_fetcher_instance.fetch_all_data()
             backtester = Backtester(combined_strategy, data)
             backtester.run_backtest()
         st.success("所有策略执行完成")
@@ -150,8 +228,8 @@ elif page == "回测":
     
     if st.button("运行回测"):
         with st.spinner("运行回测..."):
-            data_fetcher = data_fetcher()
-            data = data_fetcher.fetch_all_data()
+            data_fetcher_instance = data_fetcher()
+            data = data_fetcher_instance.fetch_all_data()
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
             ])

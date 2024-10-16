@@ -18,6 +18,7 @@ from combined_strategy.combined_strategy import CombinedStrategy
 from backtest.backtester import Backtester
 from utils.logger import setup_logger
 from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FILE, BACKTRACE_FILE, TRANSACTION_COST_RATE, SLIPPAGE_RATE
+import config
 
 # 导入价格时序管理器
 from price_time_series_manager import PriceTimeSeriesManager
@@ -482,5 +483,6 @@ with tab5:
         portfolio.initial_cash = new_initial_cash
         portfolio.cash = new_initial_cash
         portfolio.save_portfolio()
+        config.INITIAL_CASH = new_initial_cash
         st.success(f"初始现金已更新为 ￥{new_initial_cash:,.2f}")
         st.rerun()

@@ -41,7 +41,7 @@ class DataFetcher:
             try:
                 index_df = ak.index_stock_cons(symbol=index_code)
                 if '代码' in index_df.columns:
-                    symbols = index_df['代码'].str.strip().tolist()
+                    symbols = index_df['品种代码'].str.strip().tolist()
                     logging.info(f"从指数 {index_code} 获取到 {len(symbols)} 只股票代码。")
                     all_symbols.update(symbols)
                 else:

@@ -1,5 +1,6 @@
 # data/data_fetcher.py
 
+
 import akshare as ak
 import pandas as pd
 import logging

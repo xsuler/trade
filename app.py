@@ -54,7 +54,7 @@ page = st.sidebar.radio("前往", ["投资组合", "交易日志", "实时交易
 
 # 实时交易的后台线程函数
 def live_trading_thread():
-    data_fetcher_instance = st.session_state.data_fetcher
+    data_fetcher_instance = data_fetcher()
     combined_strategy = CombinedStrategy([
         StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
     ])

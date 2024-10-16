@@ -71,5 +71,4 @@ class Portfolio:
         for symbol, qty in self.holdings.items():
             price = current_prices.get(symbol, 0.0)
             total += price * qty
-        logging.info(f"组合总价值: {total}")
         return total

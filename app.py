@@ -35,7 +35,7 @@ if 'log_messages' not in st.session_state:
 def data_fetcher():
     return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d")) 
 
-@st.cache_data(ttl=3600)
+
 def all_stock_data():
     data_fetcher_instance = data_fetcher()
     return data_fetcher_instance.fetch_all_data()

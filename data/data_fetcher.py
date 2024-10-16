@@ -44,6 +44,7 @@ class DataFetcher:
                     symbols = index_df['品种代码'].str.strip().tolist()
                     logging.info(f"从指数 {index_code} 获取到 {len(symbols)} 只股票代码。")
                     all_symbols.update(symbols)
+                    
                 else:
                     logging.warning(f"指数 {index_code} 的成分股数据中不包含 '代码' 列。")
             except Exception as e:

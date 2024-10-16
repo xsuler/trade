@@ -1,0 +1,14 @@
+# 基础数据处理与科学计算
+pandas
+numpy
+
+# 金融数据获取
+akshare
+
+# 任务调度
+schedule
+# 用户界面
+streamlit
+
+# 数据可视化
+plotly

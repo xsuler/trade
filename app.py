@@ -2,11 +2,9 @@ import streamlit as st
 import pandas as pd
 import os
 import json
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
-import queue  # Import the queue module
 
 # 导入您的模块
 from portfolio.portfolio import Portfolio
@@ -24,13 +22,11 @@ from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FI
 # 设置日志
 setup_logger()
 
-# Initialize session state variables
+# 初始化 Session State
 if 'live_trading' not in st.session_state:
     st.session_state.live_trading = False
 if 'signals' not in st.session_state:
     st.session_state.signals = []
-if 'signal_queue' not in st.session_state:
-    st.session_state.signal_queue = queue.Queue()
 
 @st.cache_resource
 def data_fetcher():
@@ -52,45 +48,37 @@ st.title("量化交易系统")
 st.sidebar.title("导航")
 page = st.sidebar.radio("前往", ["投资组合", "交易日志", "实时交易", "回测", "设置"])
 
-# Function to process queued signals
-def process_signal_queue():
-    while not st.session_state.signal_queue.empty():
-        signal = st.session_state.signal_queue.get()
-        st.session_state.signals.append(signal)
+# 引入自动刷新功能（仅在实时交易模式下）
+if 'auto_refresh_id' not in st.session_state:
+    st.session_state.auto_refresh_id = None
 
-# Process any new signals from the queue
-process_signal_queue()
-
-# 实时交易的后台线程函数
-def live_trading_thread():
+# 实时交易的逻辑函数
+def perform_live_trading():
     data_fetcher_instance = data_fetcher()
     combined_strategy = CombinedStrategy([
         StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
     ])
-    while st.session_state.live_trading:
-        data = data_fetcher_instance.fetch_all_data()
-        for symbol, df in data.items():
-            buy_trades, sell_trades = combined_strategy.decide_trade(df.copy(), portfolio)
-            # 添加到信号队列
-            for trade in buy_trades:
-                signal = {
-                    'type': 'buy',
-                    'symbol': trade['symbol'],
-                    'price': trade['price'],
-                    'quantity': trade['quantity'],
-                    'time': datetime.now()
-                }
-                st.session_state.signal_queue.put(signal)
-            for trade in sell_trades:
-                signal = {
-                    'type': 'sell',
-                    'symbol': trade['symbol'],
-                    'price': trade['price'],
-                    'quantity': trade['quantity'],
-                    'time': datetime.now()
-                }
-                st.session_state.signal_queue.put(signal)
-        time.sleep(60)  # 每分钟获取一次数据
+    data = data_fetcher_instance.fetch_all_data()
+    for symbol, df in data.items():
+        buy_trades, sell_trades = combined_strategy.decide_trade(df.copy(), portfolio)
+        # 添加买入信号
+        for trade in buy_trades:
+            st.session_state.signals.append({
+                'type': 'buy',
+                'symbol': trade['symbol'],
+                'price': trade['price'],
+                'quantity': trade['quantity'],
+                'time': datetime.now()
+            })
+        # 添加卖出信号
+        for trade in sell_trades:
+            st.session_state.signals.append({
+                'type': 'sell',
+                'symbol': trade['symbol'],
+                'price': trade['price'],
+                'quantity': trade['quantity'],
+                'time': datetime.now()
+            })
 
 # 页面内容
 if page == "投资组合":
@@ -150,15 +138,29 @@ elif page == "实时交易":
     if not st.session_state.live_trading:
         if st.button("启动实时交易"):
             st.session_state.live_trading = True
-            # 启动后台线程
-            t = threading.Thread(target=live_trading_thread, daemon=True)
-            t.start()
+            st.session_state.signals = []  # 清空之前的信号
+            # 启动自动刷新，每分钟刷新一次（60000 毫秒）
+            st.session_state.auto_refresh_id = st.experimental_get_query_params()
+            st.experimental_set_query_params(auto_refresh=True)
+            st.experimental_rerun()
             st.success("实时交易已启动")
     else:
         if st.button("停止实时交易"):
             st.session_state.live_trading = False
+            # 停止自动刷新
+            st.experimental_set_query_params(auto_refresh=False)
+            st.experimental_rerun()
             st.success("实时交易已停止")
     
+    # 如果实时交易开启，执行交易逻辑
+    if st.session_state.live_trading:
+        perform_live_trading()
+        # 启动自动刷新，每分钟刷新一次（60000 毫秒）
+        count = st.experimental_get_query_params().get('count', [0])[0]
+        count = int(count) + 1
+        st.experimental_set_query_params(count=count)
+        st.experimental_rerun()
+
     st.subheader("当前信号")
     if st.session_state.signals:
         # 使用副本防止在迭代时修改列表
@@ -193,8 +195,11 @@ elif page == "回测":
     
     # 选择回测日期
     st.subheader("选择回测日期范围")
-    start_date = st.date_input("开始日期", datetime(2022, 1, 1))
-    end_date = st.date_input("结束日期", datetime.now())
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("开始日期", datetime(2022, 1, 1))
+    with col2:
+        end_date = st.date_input("结束日期", datetime.now())
     
     if st.button("运行回测"):
         with st.spinner("运行回测..."):

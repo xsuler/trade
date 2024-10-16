@@ -12,8 +12,6 @@ from portfolio.portfolio import Portfolio
 from storage.storage import Storage
 from data.data_fetcher import DataFetcher
 from factories.strategy_factory import StrategyFactory
-from strategies.ma_crossover_strategy import MovingAverageCrossoverStrategy
-from strategies.rsi_strategy import RSIStrategy
 from combined_strategy.combined_strategy import CombinedStrategy
 from backtest.backtester import Backtester
 from ui.user_interface import UserInterface
@@ -28,6 +26,8 @@ if 'live_trading' not in st.session_state:
     st.session_state.live_trading = False
 if 'signals' not in st.session_state:
     st.session_state.signals = []
+if 'log_messages' not in st.session_state:
+    st.session_state.log_messages = []
 
 @st.cache_resource
 def data_fetcher():
@@ -55,32 +55,64 @@ if 'auto_refresh_id' not in st.session_state:
 
 # 实时交易的逻辑函数
 def perform_live_trading():
-    data_fetcher_instance = data_fetcher()
-    combined_strategy = CombinedStrategy([
-        StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
-    ], top_n=10)  # 设置筛选前10只股票
-    data = data_fetcher_instance.fetch_all_data()
+    # 创建占位符用于显示状态信息
+    status_placeholder = st.empty()
+    progress_bar = st.progress(0)
     
-    buy_trades, sell_trades = combined_strategy.decide_trade(data, portfolio)
-    
-    # 添加买入信号
-    for trade in buy_trades:
-        st.session_state.signals.append({
-            'type': 'buy',
-            'symbol': trade['symbol'],
-            'price': trade['price'],
-            'quantity': trade['quantity'],
-            'time': datetime.now()
-        })
-    # 添加卖出信号
-    for trade in sell_trades:
-        st.session_state.signals.append({
-            'type': 'sell',
-            'symbol': trade['symbol'],
-            'price': trade['price'],
-            'quantity': trade['quantity'],
-            'time': datetime.now()
-        })
+    try:
+        # 步骤 1: 获取数据
+        status_placeholder.text("步骤 1/4: 获取所有股票数据...")
+        data_fetcher_instance = data_fetcher()
+        data = data_fetcher_instance.fetch_all_data()
+        progress_bar.progress(25)
+        st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 获取所有股票数据完成，共获取到 {len(data)} 只股票的数据。")
+        
+        # 步骤 2: 初始化策略
+        status_placeholder.text("步骤 2/4: 初始化组合策略...")
+        combined_strategy = CombinedStrategy([
+            StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
+        ], top_n=10)  # 设置筛选前10只股票
+        progress_bar.progress(50)
+        st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 组合策略初始化完成，筛选前10只股票进行处理。")
+        
+        # 步骤 3: 生成交易信号
+        status_placeholder.text("步骤 3/4: 生成交易信号...")
+        buy_trades, sell_trades = combined_strategy.decide_trade(data, portfolio)
+        progress_bar.progress(75)
+        st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 交易信号生成完成，买入信号数量: {len(buy_trades)}, 卖出信号数量: {len(sell_trades)}。")
+        
+        # 步骤 4: 处理交易信号
+        status_placeholder.text("步骤 4/4: 处理交易信号...")
+        # 添加买入信号
+        for trade in buy_trades:
+            st.session_state.signals.append({
+                'type': 'buy',
+                'symbol': trade['symbol'],
+                'price': trade['price'],
+                'quantity': trade['quantity'],
+                'time': datetime.now()
+            })
+        # 添加卖出信号
+        for trade in sell_trades:
+            st.session_state.signals.append({
+                'type': 'sell',
+                'symbol': trade['symbol'],
+                'price': trade['price'],
+                'quantity': trade['quantity'],
+                'time': datetime.now()
+            })
+        progress_bar.progress(100)
+        status_placeholder.text("实时交易完成。")
+        st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 实时交易完成，已生成并添加买入和卖出信号。")
+        
+    except Exception as e:
+        logging.error(f"实时交易过程中发生错误: {e}")
+        st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 实时交易过程中发生错误: {e}")
+        status_placeholder.text("实时交易过程中发生错误。")
+        progress_bar.empty()
+    finally:
+        # 移除已有的占位符
+        status_placeholder.empty()
 
 # 页面内容
 if page == "投资组合":
@@ -141,16 +173,17 @@ elif page == "实时交易":
         if st.button("启动实时交易"):
             st.session_state.live_trading = True
             st.session_state.signals = []  # 清空之前的信号
+            st.session_state.log_messages = []  # 清空之前的日志
             # 启动自动刷新，每分钟刷新一次（60000 毫秒）
             st.experimental_set_query_params(auto_refresh=True)
-            st.rerun()
+            st.experimental_rerun()
             st.success("实时交易已启动")
     else:
         if st.button("停止实时交易"):
             st.session_state.live_trading = False
             # 停止自动刷新
             st.experimental_set_query_params(auto_refresh=False)
-            st.rerun()
+            st.experimental_rerun()
             st.success("实时交易已停止")
 
     # 如果实时交易开启，执行交易逻辑
@@ -160,7 +193,7 @@ elif page == "实时交易":
         count = st.experimental_get_query_params().get('count', [0])[0]
         count = int(count) + 1
         st.experimental_set_query_params(count=count)
-        st.rerun()
+        st.experimental_rerun()
 
     st.subheader("当前信号")
     if st.session_state.signals:
@@ -183,13 +216,22 @@ elif page == "实时交易":
                             st.success(f"已卖出 {new_quantity} 份 {signal['symbol']}")
                         # 移除已处理的信号
                         st.session_state.signals.pop(idx)
-                        st.rerun()
+                        st.experimental_rerun()
                 with col2:
                     if st.button(f"忽略", key=f"ign_{idx}"):
                         st.session_state.signals.pop(idx)
-                        st.rerun()
+                        st.experimental_rerun()
     else:
         st.write("暂无待处理的交易信号。")
+
+    # 增加实时交易的日志展示
+    st.subheader("实时交易日志")
+    if st.session_state.log_messages:
+        log_display = st.empty()
+        for message in st.session_state.log_messages[-100:]:  # 显示最新100条日志
+            log_display.write(message)
+    else:
+        st.write("暂无实时交易日志。")
 
 elif page == "回测":
     st.header("策略回测")
@@ -236,6 +278,9 @@ elif page == "设置":
         st.success(f"初始现金已更新为 ${new_initial_cash:,.2f}")
 
     # 你可以继续添加更多的设置选项，如添加/修改策略参数等
+
+# 显示实时交易日志（无论在哪个页面）
+# 这部分可选，根据需求决定是否保留在特定页面
 
 # 运行 Streamlit 应用程序
 # 在命令行中运行: streamlit run app.py

@@ -5,6 +5,7 @@ from typing import List, Tuple, Dict
 from strategies.base_strategy import BaseStrategy
 import logging
 
+
 class CombinedStrategy(BaseStrategy):
     def __init__(self, strategies: List[BaseStrategy], top_n: int = 10):
         self.strategies = strategies

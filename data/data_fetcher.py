@@ -1,6 +1,5 @@
 # data/data_fetcher.py
 
-
 import akshare as ak
 import pandas as pd
 import logging
@@ -16,6 +15,7 @@ class DataFetcher:
         self.period = period
         self.adjust = adjust
         self.symbols = self.get_all_symbols()
+        self.spot_data = self.fetch_spot_data()  # 初始化时获取实时价格
 
     def get_all_symbols(self) -> List[str]:
         try:
@@ -27,9 +27,24 @@ class DataFetcher:
             logging.error(f"获取股票代码失败: {e}")
             return []
 
+    def fetch_spot_data(self) -> pd.DataFrame:
+        """获取所有A股的实时价格数据"""
+        try:
+            spot_df = ak.stock_zh_a_spot_em()
+            if spot_df is not None and not spot_df.empty:
+                logging.info("成功获取实时价格数据。")
+                return spot_df
+            else:
+                logging.warning("未获取到实时价格数据。")
+                return pd.DataFrame()
+        except Exception as e:
+            logging.error(f"获取实时价格数据失败: {e}")
+            return pd.DataFrame()
+
     def fetch_data_for_symbol(self, symbol: str) -> Tuple[str, pd.DataFrame]:
         try:
-            df = ak.stock_zh_a_daily(symbol=symbol, start_date=self.start_date, end_date=self.end_date, adjust=self.adjust)
+            # 使用 stock_zh_a_hist 代替 stock_zh_a_daily
+            df = ak.stock_zh_a_hist(symbol=symbol, period=self.period, start_date=self.start_date, end_date=self.end_date, adjust=self.adjust)
             if df is not None and not df.empty:
                 df['symbol'] = symbol
                 return symbol, df
@@ -56,14 +71,19 @@ class DataFetcher:
         return data
 
     def fetch_current_price(self, symbol: str) -> float:
-        """获取实时价格，akshare 暂无实时API，可使用最新收盘价代替"""
+        """获取实时价格，使用 stock_zh_a_spot_em"""
         try:
-            df = ak.stock_zh_a_daily(symbol=symbol, start_date=self.end_date, end_date=self.end_date, adjust=self.adjust)
-            if df is not None and not df.empty:
-                current_price = df.iloc[-1]['close']
+            if self.spot_data.empty:
+                logging.warning("实时价格数据为空，无法获取当前价格。返回0.0")
+                return 0.0
+
+            # 查找对应的 symbol 的实时价格
+            row = self.spot_data[self.spot_data['代码'] == symbol]
+            if not row.empty:
+                current_price = float(row.iloc[0]['最新价'])  # 确保转换为浮点数
                 return current_price
             else:
-                logging.warning(f"无法获取 {symbol} 的当前价格，使用最新收盘价代替")
+                logging.warning(f"无法找到 {symbol} 的实时价格，使用最新收盘价代替")
                 return 0.0
         except Exception as e:
             logging.error(f"获取 {symbol} 当前价格失败: {e}")

@@ -8,7 +8,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Dict
 from config.config import INITIAL_CASH
 import os
-import streamlit as st
 
 class DataFetcher:
     def __init__(self, start_date: str, end_date: str, period: str = 'daily', adjust: str = 'hfq'):
@@ -18,7 +17,6 @@ class DataFetcher:
         self.adjust = adjust
         self.symbols = self.get_all_symbols()
 
-    @st.cache_data()
     def get_all_symbols(self) -> List[str]:
         try:
             stock_list = ak.stock_zh_a_spot_em()

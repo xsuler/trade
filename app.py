@@ -35,6 +35,12 @@ if 'log_messages' not in st.session_state:
 def data_fetcher():
     return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d")) 
 
+@st.cache_data(ttl=3600)
+def all_stock_data():
+    data_fetcher_instance = data_fetcher()
+    return data_fetcher_instance.fetch_all_data()
+
+
 # 初始化组件（全局状态）
 @st.cache_resource
 def initialize_portfolio():
@@ -64,8 +70,7 @@ def perform_live_trading():
     try:
         # 步骤 1: 获取数据
         status_placeholder.text("步骤 1/4: 获取所有股票数据...")
-        data_fetcher_instance = data_fetcher()
-        data = data_fetcher_instance.fetch_all_data()
+        data = all_stock_data()
         progress_bar.progress(25)
         st.session_state.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 获取所有股票数据完成，共获取到 {len(data)} 只股票的数据。")
         

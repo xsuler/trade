@@ -29,7 +29,6 @@ class CombinedStrategy(BaseStrategy):
         
         # 如果最新价格为空，避免错误
         if not latest_prices:
-            logging.warning("没有足够的股票数据进行筛选。")
             return all_buy_trades, all_sell_trades
 
         # 根据最新价格降序筛选前 top_n 只股票

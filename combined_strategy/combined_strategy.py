@@ -1,5 +1,6 @@
 # combined_strategy/combined_strategy.py
 
+import pandas as pd
 from typing import List, Tuple, Dict
 from strategies.base_strategy import BaseStrategy
 

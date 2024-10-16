@@ -25,6 +25,10 @@ from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FI
 # 设置日志
 setup_logger()
 
+@st.cache_resource
+def data_fetcher():
+    return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))    
+
 # 初始化组件（全局状态）
 @st.cache_resource
 def initialize_portfolio():
@@ -64,7 +68,7 @@ if page == "投资组合":
     # 显示组合总价值
     st.subheader("组合总价值")
     # 计算组合总价值
-    data_fetcher = DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))
+    data_fetcher = data_fetcher()
     current_prices = {symbol: data_fetcher.fetch_current_price(symbol) for symbol in portfolio.holdings.keys()}
     portfolio_value = portfolio.get_portfolio_value(current_prices)
     st.write(f"${portfolio_value:,.2f}")
@@ -112,7 +116,7 @@ elif page == "交易执行":
         
         if st.button(f"执行 {strategy_name} 策略"):
             with st.spinner(f"执行 {strategy_name} 策略..."):
-                data_fetcher = DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))
+                data_fetcher = data_fetcher()
                 data = data_fetcher.fetch_all_data()
                 for symbol, df in data.items():
                     buy_trades, sell_trades = strategy.decide_trade(df.copy(), portfolio)
@@ -130,7 +134,7 @@ elif page == "交易执行":
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
             ])
-            data_fetcher = DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))
+            data_fetcher = data_fetcher()
             data = data_fetcher.fetch_all_data()
             backtester = Backtester(combined_strategy, data)
             backtester.run_backtest()
@@ -146,7 +150,7 @@ elif page == "回测":
     
     if st.button("运行回测"):
         with st.spinner("运行回测..."):
-            data_fetcher = DataFetcher(start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"))
+            data_fetcher = data_fetcher()
             data = data_fetcher.fetch_all_data()
             combined_strategy = CombinedStrategy([
                 StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS

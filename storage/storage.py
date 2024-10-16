@@ -16,7 +16,6 @@ class Storage:
             with open(self.filepath, 'r') as f:
                 try:
                     data = json.load(f)
-                    logging.info("加载持仓数据成功。")
                     return data
                 except json.JSONDecodeError:
                     logging.warning("持仓文件格式错误，初始化新的持仓。")
@@ -28,4 +27,3 @@ class Storage:
     def save(self, data: Dict):
         with open(self.filepath, 'w') as f:
             json.dump(data, f, indent=4)
-            logging.info("持仓数据已保存。")

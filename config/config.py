@@ -5,8 +5,8 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 LOG_FILE = os.path.join(BASE_DIR, '..', 'quant_trading_system.log')
-
 PORTFOLIO_FILE = os.path.join(BASE_DIR, '..', 'portfolio.json')
+BACKTRACE_FILE = os.path.join(BASE_DIR, '..', 'backtest_result.json')  # 确认路径
 
 INITIAL_CASH = 100000
 

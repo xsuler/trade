@@ -1,5 +1,3 @@
-# factories/strategy_factory.py
-
 from typing import Dict
 from strategies.base_strategy import BaseStrategy
 from strategies.ma_crossover_strategy import MovingAverageCrossoverStrategy

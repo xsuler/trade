@@ -1,49 +1,64 @@
 # combined_strategy/combined_strategy.py
 
 import pandas as pd
-from typing import List, Tuple, Dict
+from typing import List, Dict, Tuple
+from collections import OrderedDict
 from strategies.base_strategy import BaseStrategy
-import logging
+from price_time_series_manager import PriceTimeSeriesManager
 
+class CombinedStrategy:
+    def __init__(self, strategies: List[BaseStrategy]):
+        """
+        初始化组合策略。
 
-class CombinedStrategy(BaseStrategy):
-    def __init__(self, strategies: List[BaseStrategy], top_n: int = 10):
+        :param strategies: 子策略列表
+        """
         self.strategies = strategies
-        self.top_n = top_n  # 要筛选的股票数量
+        self.price_manager = PriceTimeSeriesManager()  # 初始化管理器
 
-    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
-        # 综合所有策略生成信号
+    def decide_trade(self, data: Dict[str, pd.DataFrame], portfolio, price_time_series: Dict[str, OrderedDict]) -> Tuple[List[Dict], List[Dict]]:
+        """
+        聚合所有子策略的买入和卖出交易。
+
+        :param data: 所有股票的数据字典，键为股票代码，值为对应的DataFrame
+        :param portfolio: 当前的投资组合
+        :param price_time_series: 各股票的价格时序数据
+        :return: (买入交易列表, 卖出交易列表)
+        """
+        buy_trades_dict = {}
+        sell_trades_dict = {}
+
         for strategy in self.strategies:
-            data = strategy.generate_signals(data)
-        return data
+            trades_buy, trades_sell = strategy.decide_trade(data, portfolio, price_time_series)
 
-    def decide_trade(self, data: Dict[str, pd.DataFrame], portfolio) -> Tuple[List[Dict], List[Dict]]:
-        all_buy_trades = []
-        all_sell_trades = []
+            for trade in trades_buy:
+                trade_symbol = trade['symbol']
+                # 合并交易信号
+                if trade_symbol in buy_trades_dict:
+                    buy_trades_dict[trade_symbol]['quantity'] += trade['quantity']
+                    buy_trades_dict[trade_symbol]['price'] = (buy_trades_dict[trade_symbol]['price'] + trade['price']) / 2
+                else:
+                    buy_trades_dict[trade_symbol] = {
+                        'symbol': trade_symbol,
+                        'price': trade['price'],
+                        'quantity': trade['quantity']
+                    }
 
-        # 筛选依据：例如，根据最新价格排序，选择前 top_n 只股票
-        # 您可以根据需求更改筛选逻辑，如成交量、市值等
-        latest_prices = {}
-        for symbol, df in data.items():
-            if not df.empty:
-                latest_prices[symbol] = df.iloc[-1]['close']
-        
-        # 如果最新价格为空，避免错误
-        if not latest_prices:
-            return all_buy_trades, all_sell_trades
+            for trade in trades_sell:
+                trade_symbol = trade['symbol']
+                # 合并交易信号
+                if trade_symbol in sell_trades_dict:
+                    sell_trades_dict[trade_symbol]['quantity'] += trade['quantity']
+                    sell_trades_dict[trade_symbol]['price'] = (sell_trades_dict[trade_symbol]['price'] + trade['price']) / 2
+                else:
+                    sell_trades_dict[trade_symbol] = {
+                        'symbol': trade_symbol,
+                        'price': trade['price'],
+                        'quantity': trade['quantity']
+                    }
 
-        # 根据最新价格降序筛选前 top_n 只股票
-        sorted_symbols = sorted(latest_prices.items(), key=lambda x: x[1], reverse=True)
-        selected_symbols = [symbol for symbol, price in sorted_symbols[:self.top_n]]
-        logging.info(f"Selected top {self.top_n} symbols based on latest price: {selected_symbols}")
+        # 转换为列表形式
+        merged_buy_trades = list(buy_trades_dict.values())
+        merged_sell_trades = list(sell_trades_dict.values())
 
-        # 对选中的股票应用所有策略
-        for symbol in selected_symbols:
-            df = data.get(symbol)
-            if df is not None and not df.empty:
-                for strategy in self.strategies:
-                    buy_trades, sell_trades = strategy.decide_trade(df.copy(), portfolio)
-                    all_buy_trades.extend(buy_trades)
-                    all_sell_trades.extend(sell_trades)
-
-        return all_buy_trades, all_sell_trades
+        return merged_buy_trades, merged_sell_trades

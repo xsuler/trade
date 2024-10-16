@@ -3,7 +3,6 @@
 import akshare as ak
 import pandas as pd
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Dict
 from config.config import INITIAL_CASH
 import os
@@ -57,16 +56,13 @@ class DataFetcher:
 
     def fetch_all_data(self) -> Dict[str, pd.DataFrame]:
         data = {}
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {executor.submit(self.fetch_data_for_symbol, symbol): symbol for symbol in self.symbols}
-            for future in as_completed(futures):
-                symbol = futures[future]
-                try:
-                    sym, df = future.result()
-                    if not df.empty:
-                        data[sym] = df
-                except Exception as e:
-                    logging.error(f"处理 {symbol} 时发生异常: {e}")
+        for symbol in self.symbols:
+            try:
+                sym, df = self.fetch_data_for_symbol(symbol)
+                if not df.empty:
+                    data[sym] = df
+            except Exception as e:
+                logging.error(f"处理 {symbol} 时发生异常: {e}")
         logging.info(f"成功获取 {len(data)} 只股票的历史数据。")
         return data
 

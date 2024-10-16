@@ -1,8 +1,18 @@
+# strategies/base_strategy.py
+
 from abc import ABC, abstractmethod
 import pandas as pd
 from typing import List, Tuple, Dict
 
 class BaseStrategy(ABC):
+    def __init__(self, weight: float = 1.0):
+        """
+        初始化策略。
+
+        :param weight: 策略权重
+        """
+        self.weight = weight
+
     @abstractmethod
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """生成交易信号"""

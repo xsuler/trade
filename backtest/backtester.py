@@ -19,7 +19,7 @@ class Backtester:
         self.price_manager = PriceTimeSeriesManager()  # 初始化管理器
 
     def run_backtest(self):
-        portfolio = Portfolio(initial_cash=INITIAL_CASH, data_fetcher=None)  # 确保使用相同的初始现金
+        portfolio = Portfolio(initial_cash=INITIAL_CASH, data_fetcher=None, simulate_costs=True)  # 启用交易成本模拟
 
         # 获取所有交易日期的排序列表
         all_dates = set()
@@ -70,11 +70,10 @@ class Backtester:
                 quantity = trade['quantity']
                 portfolio.sell_stock(trade['symbol'], price, quantity, current_date.strftime("%Y-%m-%d %H:%M:%S"))
 
-
         total_return = (portfolio.get_portfolio_value() - portfolio.initial_cash) / portfolio.initial_cash
         logging.info(f"回测总收益: {total_return * 100:.2f}%")
         self.results = {'total_return': total_return}
-        
+
         # 保存详细结果
         backtest_result = {
             'total_return': total_return,

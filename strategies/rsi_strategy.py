@@ -8,7 +8,8 @@ from .base_strategy import BaseStrategy
 import logging
 
 class RSIStrategy(BaseStrategy):
-    def __init__(self, window: int = 14, overbought: float = 70, oversold: float = 30, buy_pct: float = 0.05, sell_pct: float = 0.3):
+    def __init__(self, window: int = 14, overbought: float = 70, oversold: float = 30, buy_pct: float = 0.05, sell_pct: float = 0.3, weight: float = 1.0):
+        super().__init__(weight)
         self.window = window
         self.overbought = overbought
         self.oversold = oversold
@@ -73,7 +74,7 @@ class RSIStrategy(BaseStrategy):
 
             # 生成买入信号
             if latest['Position'] == 1:
-                budget = portfolio.cash * adjusted_buy_pct
+                budget = portfolio.cash * adjusted_buy_pct * self.weight
                 quantity = int(budget // current_price)
                 if quantity > 0:
                     trades_buy.append({
@@ -85,7 +86,7 @@ class RSIStrategy(BaseStrategy):
 
             # 生成卖出信号
             elif latest['Position'] == -1 and symbol in portfolio.holdings:
-                quantity = int(portfolio.holdings[symbol] * adjusted_sell_pct)
+                quantity = int(portfolio.holdings[symbol] * adjusted_sell_pct * self.weight)
                 if quantity > 0:
                     trades_sell.append({
                         'symbol': symbol,

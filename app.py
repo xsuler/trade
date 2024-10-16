@@ -17,7 +17,7 @@ from factories.strategy_factory import StrategyFactory
 from combined_strategy.combined_strategy import CombinedStrategy
 from backtest.backtester import Backtester
 from utils.logger import setup_logger
-from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FILE, BACKTRACE_FILE
+from config.config import STRATEGY_CONFIGS, INITIAL_CASH, PORTFOLIO_FILE, LOG_FILE, BACKTRACE_FILE, TRANSACTION_COST_RATE, SLIPPAGE_RATE
 
 # 导入价格时序管理器
 from price_time_series_manager import PriceTimeSeriesManager
@@ -38,7 +38,6 @@ if 'trade_history' not in st.session_state:
 if 'price_history' not in st.session_state:
     st.session_state.price_history = []  # 存储价格更新历史
 
-
 @st.cache_resource(show_spinner=False)
 def data_fetcher():
     return DataFetcher(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))
@@ -49,13 +48,13 @@ def all_stock_data(start_date, end_date):
     return data_fetcher_instance.fetch_all_data(start_date=start_date, end_date=end_date)
 
 @st.cache_resource(show_spinner=False)
-def portfolio():
+def portfolio_instance():
     storage = Storage(filepath=PORTFOLIO_FILE)
-    portfolio = Portfolio(initial_cash=INITIAL_CASH, storage=storage, data_fetcher=data_fetcher())
+    portfolio = Portfolio(initial_cash=INITIAL_CASH, storage=storage, data_fetcher=data_fetcher(), simulate_costs=False)
     return portfolio
 
-
-portfolio().load_portfolio()
+portfolio = portfolio_instance()
+portfolio.load_portfolio()
 
 # 页面标题
 st.title("量化交易系统")
@@ -80,18 +79,18 @@ def perform_live_trading():
         # 步骤 2: 获取最新价格并更新 price_time_series
         status_placeholder.text("步骤 2/6: 更新最新价格...")
         for symbol in data.keys():
-            current_price = portfolio().data_fetcher.fetch_current_price(symbol)
+            current_price = portfolio.data_fetcher.fetch_current_price(symbol)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             price_manager.add_price(symbol, timestamp, current_price)
-            portfolio().latest_prices[symbol] = current_price
+            portfolio.latest_prices[symbol] = current_price
             # 收集用于可视化的价格历史
-            if symbol in portfolio().holdings:
+            if symbol in portfolio.holdings:
                 st.session_state.price_history.append({
                     'symbol': symbol,
                     'price': current_price,
                     'time': datetime.now()
                 })
-            
+
             # 将最新价格添加到 data[symbol] 数据帧中
             if current_price > 0:
                 new_row = {
@@ -105,7 +104,7 @@ def perform_live_trading():
                     'symbol': symbol
                 }
                 data[symbol] = pd.concat([data[symbol], pd.DataFrame([new_row])], ignore_index=True)
-        portfolio().save_portfolio()
+        portfolio.save_portfolio()
         progress_bar.progress(33)
         st.session_state.log_messages.append(
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 最新价格更新完成。"
@@ -113,9 +112,10 @@ def perform_live_trading():
 
         # 步骤 3: 初始化策略
         status_placeholder.text("步骤 3/6: 初始化组合策略...")
-        combined_strategy = CombinedStrategy([
-            StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
-        ])
+        strategies = [
+            StrategyFactory.get_strategy(cfg['name'], weight=cfg.get('weight', 1.0), **cfg['params']) for cfg in STRATEGY_CONFIGS
+        ]
+        combined_strategy = CombinedStrategy(strategies)
         progress_bar.progress(50)
         st.session_state.log_messages.append(
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 组合策略初始化完成，子策略已准备就绪。"
@@ -123,7 +123,7 @@ def perform_live_trading():
 
         # 步骤 4: 生成交易信号
         status_placeholder.text("步骤 4/6: 生成交易信号...")
-        buy_trades, sell_trades = combined_strategy.decide_trade(data, portfolio(), price_manager.get_all_series())
+        buy_trades, sell_trades = combined_strategy.decide_trade(data, portfolio, price_manager.get_all_series())
         progress_bar.progress(66)
         st.session_state.log_messages.append(
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 交易信号生成完成，买入信号数量: {len(buy_trades)}, 卖出信号数量: {len(sell_trades)}。"
@@ -183,14 +183,13 @@ with tab1:
         f = open(LOG_FILE, "a")
         f.truncate(0)
         f.close()
-        portfolio().reset_portfolio()
+        portfolio.reset_portfolio()
 
         if os.path.exists(PORTFOLIO_FILE):
             os.remove(PORTFOLIO_FILE)
         if os.path.exists(BACKTRACE_FILE):
             os.remove(BACKTRACE_FILE)
         st.rerun()
-
 
     st.header("投资组合概览")
 
@@ -199,11 +198,11 @@ with tab1:
 
     with col1:
         st.subheader("现金")
-        st.write(f"￥{portfolio().cash:,.2f}")
+        st.write(f"￥{portfolio.cash:,.2f}")
 
     with col2:
         st.subheader("持仓")
-        holdings = portfolio().holdings
+        holdings = portfolio.holdings
         if holdings:
             holdings_df = pd.DataFrame.from_dict(holdings, orient='index', columns=['数量'])
             st.dataframe(holdings_df)
@@ -212,16 +211,16 @@ with tab1:
 
     # 显示组合总价值
     st.subheader("组合总价值")
-    portfolio_value = portfolio().get_portfolio_value()
+    portfolio_value = portfolio.get_portfolio_value()
     st.write(f"￥{portfolio_value:,.2f}")
 
     # 计算收益
-    total_return = (portfolio_value - portfolio().initial_cash) / portfolio().initial_cash
+    total_return = (portfolio_value - portfolio.initial_cash) / portfolio.initial_cash
     st.write(f"**总收益**: {total_return * 100:.2f}%")
 
     # 显示详细交易记录
     st.subheader("交易记录")
-    transactions = portfolio().transactions
+    transactions = portfolio.transactions
     if transactions:
         transactions_df = pd.DataFrame(transactions)
         transactions_df['time'] = pd.to_datetime(transactions_df['time'])
@@ -236,7 +235,7 @@ with tab1:
         st.write("暂无交易记录，无法绘制投资组合价值变化。")
     else:
         transactions_df = transactions_df.sort_values(by='time')
-        transactions_df['portfolio_value'] = portfolio().initial_cash
+        transactions_df['portfolio_value'] = portfolio.initial_cash
         for idx, row in transactions_df.iterrows():
             if row['type'] == 'buy':
                 transactions_df.at[idx, 'portfolio_value'] -= row['price'] * row['quantity']
@@ -251,10 +250,10 @@ with tab1:
     st.subheader("当前持仓收益")
 
     if holdings:
-        avg_costs = portfolio().get_average_cost()
+        avg_costs = portfolio.get_average_cost()
         profit_data = []
         for symbol, qty in holdings.items():
-            current_price = portfolio().latest_prices.get(symbol, 0.0)
+            current_price = portfolio.latest_prices.get(symbol, 0.0)
             avg_cost = avg_costs.get(symbol, 0.0)
             profit = (current_price - avg_cost) * qty
             profit_data.append({
@@ -307,8 +306,9 @@ with tab3:
                     with col1:
                         # 当用户确认买入或卖出
                         if st.button(f"确认 {signal['type'].capitalize()}", key=f"conf_{idx}"):
+                            # 实际交易，不模拟费用和滑点
                             if signal['type'] == 'buy':
-                                portfolio().buy_stock(signal['symbol'], signal['price'], new_quantity,datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                                portfolio.buy_stock(signal['symbol'], signal['price'], new_quantity, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                                 st.session_state.trade_history.append({
                                     'symbol': signal['symbol'],
                                     'price': signal['price'],
@@ -318,7 +318,7 @@ with tab3:
                                 })
                                 st.success(f"已买入 {new_quantity} 份 {signal['symbol']}")
                             elif signal['type'] == 'sell':
-                                portfolio().sell_stock(signal['symbol'], signal['price'], new_quantity,datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                                portfolio.sell_stock(signal['symbol'], signal['price'], new_quantity, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                                 st.session_state.trade_history.append({
                                     'symbol': signal['symbol'],
                                     'price': signal['price'],
@@ -330,7 +330,7 @@ with tab3:
                             # 移除已处理的信号
                             st.session_state.signals.pop(idx)
                             st.rerun()
-                        
+
                     with col2:
                         if st.button(f"忽略", key=f"ign_{idx}"):
                             st.session_state.signals.pop(idx)
@@ -347,7 +347,7 @@ with tab3:
                 log_display.write(message)
         else:
             st.write("暂无实时交易日志。")
-    
+
         # 可视化交易过程和股票价格变动
         st.subheader("交易可视化")
         if st.session_state.trade_history:
@@ -355,7 +355,7 @@ with tab3:
             trade_df['time'] = pd.to_datetime(trade_df['time'])
             symbols = trade_df['symbol'].unique().tolist()
             selected_symbol = st.selectbox("选择股票进行可视化", symbols)
-        
+
             if selected_symbol:
                 # 获取历史价格数据
                 historical_data = all_stock_data(start_date="20220101", end_date=datetime.now().strftime("%Y%m%d"))
@@ -363,11 +363,11 @@ with tab3:
                     df = historical_data[selected_symbol]
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(x=df['date'], y=df['close'], mode='lines', name='收盘价'))
-        
+
                     # 绘制买卖点
                     buys = trade_df[(trade_df['symbol'] == selected_symbol) & (trade_df['type'] == 'buy')]
                     sells = trade_df[(trade_df['symbol'] == selected_symbol) & (trade_df['type'] == 'sell')]
-        
+
                     fig.add_trace(go.Scatter(
                         x=buys['time'],
                         y=buys['price'],
@@ -375,7 +375,7 @@ with tab3:
                         marker=dict(color='green', size=10, symbol='triangle-up'),
                         name='买入'
                     ))
-        
+
                     fig.add_trace(go.Scatter(
                         x=sells['time'],
                         y=sells['price'],
@@ -383,7 +383,7 @@ with tab3:
                         marker=dict(color='red', size=10, symbol='triangle-down'),
                         name='卖出'
                     ))
-        
+
                     fig.update_layout(title=f"{selected_symbol} 价格与交易信号",
                                       xaxis_title="时间",
                                       yaxis_title="价格 (元)")
@@ -392,7 +392,7 @@ with tab3:
                     st.write(f"没有找到 {selected_symbol} 的历史数据。")
         else:
             st.write("暂无交易历史，无法进行可视化。")
-        
+
         # 可视化价格更新
         st.subheader("价格更新可视化")
         if st.session_state.price_history:
@@ -400,22 +400,22 @@ with tab3:
             price_df['time'] = pd.to_datetime(price_df['time'])
             symbols = price_df['symbol'].unique().tolist()
             selected_symbol_price = st.selectbox("选择股票查看价格变化", symbols, key='price_select')
-        
+
             if selected_symbol_price:
                 price_symbol_df = price_df[price_df['symbol'] == selected_symbol_price]
                 price_symbol_df = price_symbol_df.sort_values(by='time')
-        
+
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=price_symbol_df['time'], y=price_symbol_df['price'],
                                          mode='lines+markers', name='最新价格'))
-        
+
                 fig.update_layout(title=f"{selected_symbol_price} 最新价格变化",
                                   xaxis_title="时间",
                                   yaxis_title="价格 (元)")
                 st.plotly_chart(fig)
         else:
             st.write("暂无价格更新记录。")
-    
+
 # 回测页面
 with tab4:
     st.header("策略回测")
@@ -434,20 +434,22 @@ with tab4:
                 start_date=start_date.strftime("%Y%m%d"),
                 end_date=end_date.strftime("%Y%m%d")
             )
-            data = all_stock_data(start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"))
+            data = data_fetcher_instance.fetch_all_data(start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"))
 
-            combined_strategy = CombinedStrategy([
-                StrategyFactory.get_strategy(cfg['name'], **cfg['params']) for cfg in STRATEGY_CONFIGS
-            ])  # 不限制 top_n
+            strategies = [
+                StrategyFactory.get_strategy(cfg['name'], weight=cfg.get('weight', 1.0), **cfg['params']) for cfg in STRATEGY_CONFIGS
+            ]
+            combined_strategy = CombinedStrategy(strategies)  # 不限制 top_n
 
             backtester = Backtester(combined_strategy, data)
             results = backtester.run_backtest()
         st.success(f"回测完成，收益: {results['total_return']*100:.2f}%")
         st.write("回测结果:", results)
+        st.rerun()
 
     # 显示最新回测结果
     st.subheader("最新回测结果")
-    backtest_result_path = Path(PORTFOLIO_FILE).parent / 'backtest_result.json'
+    backtest_result_path = Path(BACKTRACE_FILE)
     if backtest_result_path.exists():
         with open(backtest_result_path, 'r') as f:
             backtest_results = json.load(f)
@@ -467,17 +469,18 @@ with tab5:
     st.header("系统设置")
 
     # 显示当前配置
-    st.subheader("当前策略配置")
+    st.subheader("当前策略配置与权重")
     for cfg in STRATEGY_CONFIGS:
-        st.write(f"### {cfg['name']}")
+        st.write(f"### {cfg['name']} - 权重: {cfg.get('weight', 1.0)}")
         for key, value in cfg['params'].items():
             st.write(f"- **{key}**: {value}")
 
     st.subheader("修改交易参数")
     # 示例：修改初始现金
-    new_initial_cash = st.number_input("初始现金金额", value=portfolio().initial_cash, min_value=0, step=1000)
+    new_initial_cash = st.number_input("初始现金金额", value=portfolio.initial_cash, min_value=0, step=1000)
     if st.button("更新初始现金"):
-        portfolio().initial_cash = new_initial_cash
-        portfolio().cash = new_initial_cash
-        portfolio().save_portfolio()
+        portfolio.initial_cash = new_initial_cash
+        portfolio.cash = new_initial_cash
+        portfolio.save_portfolio()
         st.success(f"初始现金已更新为 ￥{new_initial_cash:,.2f}")
+        st.rerun()

@@ -5,19 +5,19 @@ from datetime import datetime
 from typing import Dict, Optional, List
 from storage.storage import Storage
 from data.data_fetcher import DataFetcher
-from config.config import INITIAL_CASH
+from config.config import INITIAL_CASH, TRANSACTION_COST_RATE, SLIPPAGE_RATE
 
 class Portfolio:
-    def __init__(self, initial_cash: float = INITIAL_CASH, data_fetcher: Optional[DataFetcher] = None, storage: Optional[Storage] = None):
+    def __init__(self, initial_cash: float = INITIAL_CASH, data_fetcher: Optional[DataFetcher] = None, storage: Optional[Storage] = None, simulate_costs: bool = False):
         self.initial_cash = initial_cash
         self.cash = initial_cash
         self.holdings: Dict[str, int] = {}  # symbol: quantity
         self.transactions = []
         self.data_fetcher = data_fetcher
         self.storage = storage if storage else Storage()
-        # 存储每个股票的买入批次，用于FIFO计算
         self.buy_lots: Dict[str, List[Dict[str, float]]] = {}
         self.latest_prices = {}
+        self.simulate_costs = simulate_costs  # 是否模拟交易成本
         self.load_portfolio()
 
     def load_portfolio(self):
@@ -32,7 +32,6 @@ class Portfolio:
                 self.latest_prices[symbol] = self.data_fetcher.fetch_current_price(symbol)
             self.save_portfolio()
 
-
     def save_portfolio(self):
         data = {
             'cash': self.cash,
@@ -45,6 +44,10 @@ class Portfolio:
 
     def buy_stock(self, symbol: str, price: float, quantity: int, time: str):
         cost = price * quantity
+        # 模拟交易成本和滑点
+        if self.simulate_costs:
+            cost += cost * TRANSACTION_COST_RATE  # 交易成本
+            cost += price * quantity * SLIPPAGE_RATE  # 滑点
         if self.cash >= cost:
             self.cash -= cost
             self.holdings[symbol] = self.holdings.get(symbol, 0) + quantity
@@ -54,6 +57,7 @@ class Portfolio:
                 'price': price,
                 'quantity': quantity,
                 'time': time,
+                'cost': cost
             })
             logging.info(f"买入 {symbol} - 数量: {quantity}, 价格: {price}, 成本: ￥{cost:.2f}")
             # 更新买入批次
@@ -66,7 +70,12 @@ class Portfolio:
 
     def sell_stock(self, symbol: str, price: float, quantity: int, time: str):
         if self.holdings.get(symbol, 0) >= quantity:
-            self.cash += price * quantity
+            revenue = price * quantity
+            # 模拟交易成本和滑点
+            if self.simulate_costs:
+                revenue -= revenue * TRANSACTION_COST_RATE  # 交易成本
+                revenue -= price * quantity * SLIPPAGE_RATE  # 滑点
+            self.cash += revenue
             self.holdings[symbol] -= quantity
             if self.holdings[symbol] == 0:
                 del self.holdings[symbol]
@@ -76,8 +85,9 @@ class Portfolio:
                 'price': price,
                 'quantity': quantity,
                 'time': time,
+                'revenue': revenue
             })
-            logging.info(f"卖出 {symbol} - 数量: {quantity}, 价格: {price}, 收益: ￥{price * quantity:.2f}")
+            logging.info(f"卖出 {symbol} - 数量: {quantity}, 价格: {price}, 收益: ￥{revenue:.2f}")
             # 更新买入批次（FIFO）
             if symbol in self.buy_lots:
                 remaining_qty = quantity
@@ -123,5 +133,6 @@ class Portfolio:
         self.holdings = {}
         self.transactions = []
         self.buy_lots = {}
+        self.latest_prices = {}
         self.save_portfolio()
         logging.info("组合已重置。")

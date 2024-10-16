@@ -8,7 +8,8 @@ from .base_strategy import BaseStrategy
 import logging
 
 class MovingAverageCrossoverStrategy(BaseStrategy):
-    def __init__(self, short_window: int = 5, long_window: int = 20, buy_pct: float = 0.1, sell_pct: float = 0.5):
+    def __init__(self, short_window: int = 5, long_window: int = 20, buy_pct: float = 0.1, sell_pct: float = 0.5, weight: float = 1.0):
+        super().__init__(weight)
         self.short_window = short_window
         self.long_window = long_window
         self.buy_pct = buy_pct  # 买入资金比例
@@ -69,7 +70,7 @@ class MovingAverageCrossoverStrategy(BaseStrategy):
 
             # 生成买入信号
             if latest['Position'] == 1:
-                budget = portfolio.cash * adjusted_buy_pct
+                budget = portfolio.cash * adjusted_buy_pct * self.weight
                 quantity = int(budget // current_price)
                 if quantity > 0:
                     trades_buy.append({
@@ -81,7 +82,7 @@ class MovingAverageCrossoverStrategy(BaseStrategy):
 
             # 生成卖出信号
             elif latest['Position'] == -1 and symbol in portfolio.holdings:
-                quantity = int(portfolio.holdings[symbol] * adjusted_sell_pct)
+                quantity = int(portfolio.holdings[symbol] * adjusted_sell_pct * self.weight)
                 if quantity > 0:
                     trades_sell.append({
                         'symbol': symbol,

@@ -39,7 +39,7 @@ class DataFetcher:
         all_symbols = set()
         for index_code in self.hot_indices:
             try:
-                index_df = ak.index_stock_cons(index=index_code)
+                index_df = ak.index_stock_cons(symbol=index_code)
                 if '代码' in index_df.columns:
                     symbols = index_df['代码'].str.strip().tolist()
                     logging.info(f"从指数 {index_code} 获取到 {len(symbols)} 只股票代码。")

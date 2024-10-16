@@ -6,8 +6,12 @@ import logging
 from typing import List, Tuple, Dict
 from config.config import INITIAL_CASH
 import os
+from cachetools import cached, TTLCache
 
 class DataFetcher:
+    # 定义一个全局缓存，最多保存1个条目，TTL为12小时
+    _fetch_all_data_cache = TTLCache(maxsize=1, ttl=43200)  # 43200秒 = 12小时
+
     def __init__(self, start_date: str, end_date: str, period: str = 'daily', adjust: str = 'hfq', hot_indices: List[str] = None):
         """
         初始化 DataFetcher
@@ -26,7 +30,6 @@ class DataFetcher:
         self.symbols = self.get_hot_symbols()
         self.spot_data = self.fetch_spot_data()  # 初始化时获取实时价格
 
-    
     def get_hot_symbols(self) -> List[str]:
         """
         获取热门指数的成分股代码
@@ -45,7 +48,7 @@ class DataFetcher:
                     logging.warning(f"指数 {index_code} 的成分股数据中不包含 '代码' 列。")
             except Exception as e:
                 logging.error(f"获取指数 {index_code} 成分股失败: {e}")
-        
+
         symbols_list = sorted(list(all_symbols))
         logging.info(f"总共获取到 {len(symbols_list)} 只热门股票代码。")
         return symbols_list
@@ -81,7 +84,12 @@ class DataFetcher:
             logging.error(f"获取 {symbol} 数据失败: {e}")
             return symbol, pd.DataFrame()
 
+    @cached(_fetch_all_data_cache)
     def fetch_all_data(self) -> Dict[str, pd.DataFrame]:
+        """
+        获取所有热门股票的历史数据，并使用缓存优化性能。
+        缓存有效期为12小时。
+        """
         data = {}
         for symbol in self.symbols:
             try:
